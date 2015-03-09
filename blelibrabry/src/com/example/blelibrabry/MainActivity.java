@@ -119,13 +119,7 @@ public class MainActivity extends Activity {
 	@Override
     protected void onPause() {
         super.onPause();
-        mBluetoothAdapter.stopLeScan(mLeScanCallback);
-        //disconnectBLE();
-        try{
-        	 unregisterReceiver(mGattUpdateReceiver);
-        }catch(Exception e){
-        	Log.i(TAG, "mGattUpdateReceiver unregisterReceiver exception.");
-        }       
+        mBluetoothAdapter.stopLeScan(mLeScanCallback);   
     }
 	
 	// Device scan callback.
@@ -139,7 +133,7 @@ public class MainActivity extends Activity {
                 	Log.i(TAG, "Found BLE device: " + device.toString());
 					Log.i(TAG, "Device BLE name: " + device.getName());
 
-					if(device.getName().equals("PAFERS HR-KIT")){
+					if(device.getName() != null && device.getName().equals("PAFERS HR-KIT")){
 						mDevice = device;						
 	                    if(mDevice != null){
 	                    	mBluetoothAdapter.stopLeScan(mLeScanCallback);
@@ -181,11 +175,6 @@ public class MainActivity extends Activity {
     Intent gattServiceIntent;
     
     public void initialBLEService(){
-    	try{
-    		registerReceiver(mGattUpdateReceiver, makeGattUpdateIntentFilter());
-    	}catch(Exception e){
-    		Log.d(TAG, "Exception for register mGattUpdateReceiver: " + e.toString());
-    	}
     	if(gattServiceIntent == null || !serviceBinded){
     		gattServiceIntent = new Intent(this, BluetoothLeService.class);
             bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
@@ -208,18 +197,11 @@ public class MainActivity extends Activity {
         mBluetoothLeService = null;
         serviceBinded = false;
     } 
-    private static IntentFilter makeGattUpdateIntentFilter() {
-        final IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(BluetoothLeService.ACTION_GATT_CONNECTED);
-        intentFilter.addAction(BluetoothLeService.ACTION_GATT_DISCONNECTED);
-        intentFilter.addAction(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
-        intentFilter.addAction(BluetoothLeService.ACTION_DATA_AVAILABLE);
-        return intentFilter;
-    }
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder service) {
             mBluetoothLeService = ((BluetoothLeService.LocalBinder) service).getService();
+            mBluetoothLeService.setListener(mBluetoothLEListener);
             if (!mBluetoothLeService.initialize()) {
                 Log.i(TAG, "Unable to initialize Bluetooth");
                 finish();
@@ -234,79 +216,71 @@ public class MainActivity extends Activity {
             mBluetoothLeService = null;
         }
     };
-    // Handles various events fired by the Service.
-    // ACTION_GATT_CONNECTED: connected to a GATT server.
-    // ACTION_GATT_DISCONNECTED: disconnected from a GATT server.
-    // ACTION_GATT_SERVICES_DISCOVERED: discovered GATT services.
-    // ACTION_DATA_AVAILABLE: received data from the device.  This can be a result of read
-    //                        or notification operations.
     
-	HashMap<String, BluetoothGattCharacteristic> characteristicData = new HashMap<String, BluetoothGattCharacteristic>();
-	
-    private final BroadcastReceiver mGattUpdateReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-        	String uuid = null;
-            final String action = intent.getAction();
-            if (BluetoothLeService.ACTION_GATT_CONNECTED.equals(action)) {
-            	Log.i(TAG, "ACTION_GATT_CONNECTED");
-            	mConnectionField.setText(getResources().getString(R.string.connected));
-            	mConnectButton.setVisibility(View.GONE);
-            	mDisconnectButton.setVisibility(View.VISIBLE);
-            } else if (BluetoothLeService.ACTION_GATT_DISCONNECTED.equals(action)) {
-            	Log.i(TAG, "ACTION_GATT_DISCONNECTED");
-            	mConnectionField.setText("DISCONNECTED");
-            	mConnectButton.setVisibility(View.VISIBLE);
-            	mDisconnectButton.setVisibility(View.GONE);
-            	mDataField.setText("");
-            	mDeviceField.setText("");
-            } else if (BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED.equals(action)) {
-            	Log.i(TAG, "ACTION_GATT_SERVICES_DISCOVERED");
-            	characteristicData = new HashMap<String, BluetoothGattCharacteristic>();
-            	if(mBluetoothLeService.getSupportedGattServices() != null){
-            		List<BluetoothGattService> gattServices = mBluetoothLeService.getSupportedGattServices();
-	            	for (BluetoothGattService gattService : gattServices) {
-	                    uuid = gattService.getUuid().toString();
-	                    
-	                    Log.i(TAG, SampleGattAttributes.lookup(uuid, getResources().getString(R.string.unknown_service)));
-	                    Log.i(TAG, "UUID: " + uuid);
-	                    
-	                    List<BluetoothGattCharacteristic> gattCharacteristics = gattService.getCharacteristics();						
-	                    // Loops through available Characteristics.
-	                    for (BluetoothGattCharacteristic gattCharacteristic : gattCharacteristics) {
-	                        uuid = gattCharacteristic.getUuid().toString();
-	                        String charac_name = SampleGattAttributes.lookup(uuid, getResources().getString(R.string.unknown_characteristic));
-	                        characteristicData.put(charac_name, gattCharacteristic);
-	                        Log.i(TAG, "BluetoothGattCharacteristic: " + charac_name);
-	                    }
-	                }
-	            	Log.i(TAG, characteristicData.toString());
-	            	if(characteristicData.containsKey("Manufacturer Name String")){
-	            		Log.i(TAG, "characteristicData uuid: " + characteristicData.get("Manufacturer Name String").getUuid());
-	            		mBluetoothLeService.getCharacteristcData(characteristicData.get("Manufacturer Name String"));
-	            	}
-            	}
-            } else if (BluetoothLeService.ACTION_DATA_AVAILABLE.equals(action)) {
-            	Log.i(TAG, "ACTION_DATA_AVAILABLE");
-            	String data = intent.getStringExtra(BluetoothLeService.EXTRA_DATA);
-            	String chara_name = intent.getStringExtra(BluetoothLeService.CHARACTERISTIC_NAME);
-            	if(data != null){
-            		Log.i(TAG, "DATA: " + data);
-            		if(chara_name.equals("Heart Rate Measurement")){
-            			mDataField.setText(data);
-            		}else if(chara_name.equals("Manufacturer Name String")){
-            			mDeviceField.setText(data);
-            			Log.i(TAG, "here!!!");
-                		if(characteristicData.containsKey("Heart Rate Measurement")){
-                			mBluetoothLeService.getCharacteristcData(characteristicData.get("Heart Rate Measurement"));
-    	            	}
-            		}
-            		Log.i(TAG, "characteristicData:" + characteristicData.toString());
-            	}
-            }
-        }
-    };    
+    private final BluetoothLEListener mBluetoothLEListener = new BluetoothLEListener() {
+		@Override
+		public void onBluetoothLEConnected() {
+			Log.i(TAG, "ACTION_GATT_CONNECTED");
+			runOnUiThread(new Runnable() {
+			     @Override
+			     public void run() {
+			        mConnectionField.setText(getResources().getString(R.string.connected));
+			        mConnectButton.setVisibility(View.GONE);
+			        mDisconnectButton.setVisibility(View.VISIBLE);
+			    }
+			});
+		}
 
+		@Override
+		public void onBluetoothLEConnecting() {
+			mConnectionField.setText(getResources().getString(R.string.connecting));
+			mConnectButton.setVisibility(View.GONE);
+	        mDisconnectButton.setVisibility(View.VISIBLE);
+		}
+		
+		@Override
+		public void onBluetoothLEDisconnected() {
+			Log.i(TAG, "ACTION_GATT_DISCONNECTED");
+			runOnUiThread(new Runnable() {
+			     @Override
+			     public void run() {
+		        	mConnectionField.setText("DISCONNECTED");
+		        	mConnectButton.setVisibility(View.VISIBLE);
+		        	mDisconnectButton.setVisibility(View.GONE);
+		        	mDataField.setText("");
+		        	mDeviceField.setText("");
+				 }
+			});
+		}
+
+		@Override
+		public void onBluetoothServiceDiscovered(
+			HashMap<String, BluetoothGattCharacteristic> characteristicData) {
+			Log.i(TAG, characteristicData.toString());
+		}
+
+		@Override
+		public void onBluetoothDataAvailable(HashMap<String, String> data) {
+			final HashMap<String, String> BluetoothLteExtraData = data;
+			Log.i(TAG, BluetoothLteExtraData.toString());
+			if(BluetoothLteExtraData.containsKey("Heart Rate Measurement")){
+				runOnUiThread(new Runnable() {
+				     @Override
+				     public void run() {
+				    	 mDataField.setText(BluetoothLteExtraData.get("Heart Rate Measurement"));
+					 }
+				});				    	 
+    		}
+			if(BluetoothLteExtraData.containsKey("Manufacturer Name String")){
+    			runOnUiThread(new Runnable() {
+				     @Override
+				     public void run() {
+				    	 mDeviceField.setText(BluetoothLteExtraData.get("Manufacturer Name String"));
+				     }
+    			});
+    		}
+		}    	
+    };
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		// Inflate the menu; this adds items to the action bar if it is present.

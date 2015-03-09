@@ -8,6 +8,7 @@
     <string name="ble_not_supported">Bluetooth Low Energy is Not Supported.</string>
 	<string name="heart_rate">Heart rate</string>
 	<string name="connect">Connect</string>
+	<string name="connecting">Connecting</string>
 	<string name="disconnect">Disconnect</string>
 	<string name="device_name">Device name</string>
 	<string name="connected">Connected</string>
